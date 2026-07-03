@@ -1,0 +1,11 @@
+# Figure/table generation (figures/) — no GPU required
+matplotlib
+pandas
+numpy
+
+# GPU validation experiment (validation/) — run on a CUDA GPU (e.g. Colab T4)
+torch
+transformers
+accelerate
+zeus-ml
+pynvml
