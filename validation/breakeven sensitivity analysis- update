@@ -1,0 +1,20 @@
+APEI_CLAUDE = 0.02273   # Claude Opus 4.8 (Trainium2, 500 W inferred)
+APEI_GPT = 0.01481      # GPT-5.5 (H100, 700 W confirmed TDP)
+ 
+TRAINIUM2_ESTIMATE_W = 500.0  # Patel et al. (2024), SemiAnalysis
+ 
+breakeven_W = TRAINIUM2_ESTIMATE_W * (APEI_GPT / APEI_CLAUDE)
+pct_reduction = (TRAINIUM2_ESTIMATE_W - breakeven_W) / TRAINIUM2_ESTIMATE_W * 100
+ 
+print("Break-even sensitivity: Trainium2 per-chip power")
+print(f"  Claude Opus 4.8 APEI at 500 W estimate : {APEI_CLAUDE} gCO2e/token")
+print(f"  GPT-5.5 APEI (confirmed H100 hardware)  : {APEI_GPT} gCO2e/token")
+print(f"  Break-even Trainium2 power              : {breakeven_W:.1f} W")
+print(f"  Reduction from 500 W estimate           : {pct_reduction:.1f}%")
+print()
+print("Interpretation: Claude Opus 4.8 remains the highest-emitting model")
+print(f"unless the true Trainium2 per-chip draw is below ~{breakeven_W:.0f} W,")
+print(f"i.e. unless the Patel et al. (2024) estimate is overstated by more")
+print(f"than ~{pct_reduction:.0f}%. The cleanest endpoint (Grok 4.3) depends on no")
+print("inferred power figure: Grok and Llama 4 Maverick both run on confirmed")
+print("H100 hardware.")
