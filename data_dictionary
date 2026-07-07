@@ -6,33 +6,36 @@
 
 ## `apei_dataset.csv`
 
+# Primary Dataset
+
+## `apei_dataset.csv`
+
 Each row represents one frontier language model evaluated in the study.
 
 | Column | Type | Units | Description | Source |
 |---|---|---|---|---|
-| `model` | String | — | Frontier LLM evaluated in the study | Study |
-| `provider` | String | — | Organization operating the model | Study |
-| `reasoning_tier` | String | — | Highest reasoning configuration evaluated | Artificial Analysis |
-| `hardware` | String | — | Primary accelerator architecture | Vendor documentation |
-| `chip_power_w` | Float | W | Power draw of a single accelerator chip | NVIDIA / inferred |
-| `chips_per_node` | Integer | chips | Number of accelerator chips per compute node | Vendor documentation / inferred |
-| `node_power_kw` | Float | kW | Total compute node power after applying 1.4× infrastructure overhead multiplier | Derived |
-| `throughput_tok_s` | Float | tokens/sec | Generation throughput | Artificial Analysis |
-| `ttfat_s` | Float | seconds | Time to First Answer Token | Artificial Analysis |
-| `node_energy_j_token` | Float | J/token | Compute energy consumed per generated token | Derived |
-| `facility` | String | — | Serving data center location when publicly available | Public disclosures |
-| `grid_basis` | String | — | Method used for grid intensity assignment (lookup, proxy, blend) | Study |
-| `grid_region` | String | — | EPA eGRID subregion used for emissions calculation | EPA eGRID2023 |
-| `grid_lb_mwh` | Float | lb CO₂e/MWh | Regional grid emissions factor | EPA eGRID2023 |
-| `grid_ug_j` | Float | μg CO₂e/J | Converted grid carbon intensity | Derived |
-| `cooling_method` | String | — | Cooling infrastructure classification | Public disclosures |
-| `pue` | Float | ratio | Power Usage Effectiveness assigned to facility | LBNL |
-| `confidence_compute` | String | — | Confidence level of compute assumptions | Study |
-| `confidence_grid` | String | — | Confidence level of grid assignment | Study |
-| `confidence_pue` | String | — | Confidence level of cooling/PUE assignment | Study |
-| `apei_gco2_token` | Float | g CO₂e/token | Final APEI score | Derived |
-| `query_carbon_500tok` | Float | g CO₂e/query | Carbon impact of a 500-token reasoning response | Derived |
-
+| model | String | — | Frontier LLM evaluated in the study | Study |
+| provider | String | — | Organization operating the model | Study |
+| reasoning_tier | String | — | Highest reasoning configuration evaluated | Artificial Analysis |
+| hardware | String | — | Primary accelerator architecture | Vendor documentation |
+| chip_power_w | Float | W | Power draw of a single accelerator chip | NVIDIA / inferred |
+| chips_per_node | Integer | chips | Number of accelerator chips per compute node | Vendor documentation / inferred |
+| node_power_kw | Float | kW | Total node power after applying 1.4× overhead multiplier | Derived |
+| throughput_tok_s | Float | tokens/sec | Generation throughput | Artificial Analysis |
+| ttfat_s | Float | seconds | Time to First Answer Token | Artificial Analysis |
+| node_energy_j_token | Float | J/token | Compute energy per generated token | Derived |
+| facility | String | — | Serving data center location when known | Public disclosures |
+| grid_basis | String | — | Method used for grid intensity assignment (lookup, proxy, blend) | Study |
+| grid_region | String | — | EPA eGRID subregion used for carbon calculation | EPA eGRID2023 |
+| grid_lb_mwh | Float | lb CO₂e/MWh | Regional electricity emission factor | EPA eGRID2023 |
+| grid_ug_j | Float | μg CO₂e/J | Converted grid carbon intensity | Derived |
+| cooling_method | String | — | Cooling infrastructure classification | Public disclosures |
+| pue | Float | ratio | Power Usage Effectiveness value assigned to facility | LBNL |
+| confidence_compute | String | — | Confidence level of compute assumptions | Study |
+| confidence_grid | String | — | Confidence level of grid assignment | Study |
+| confidence_pue | String | — | Confidence level of cooling/PUE assignment | Study |
+| apei_gco2_token | Float | g CO₂e/token | Final AI Power Efficiency Index score | Derived |
+| query_carbon_500tok | Float | g CO₂e/query | Carbon impact of a 500-token reasoning response | Derived |
 ---
 
 # Compute Variables
