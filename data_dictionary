@@ -1,0 +1,163 @@
+# Data Dictionary
+
+## AI Power Efficiency Index (APEI) Dataset Documentation
+
+# Primary Dataset
+
+## `apei_dataset.csv`
+
+Each row represents one frontier language model evaluated in the study.
+
+| Column | Type | Units | Description | Source |
+|---|---|---|---|---|
+| `model` | String | — | Frontier LLM evaluated in the study | Study |
+| `provider` | String | — | Organization operating the model | Study |
+| `reasoning_tier` | String | — | Highest reasoning configuration evaluated | Artificial Analysis |
+| `hardware` | String | — | Primary accelerator architecture | Vendor documentation |
+| `chip_power_w` | Float | W | Power draw of a single accelerator chip | NVIDIA / inferred |
+| `chips_per_node` | Integer | chips | Number of accelerator chips per compute node | Vendor documentation / inferred |
+| `node_power_kw` | Float | kW | Total compute node power after applying 1.4× infrastructure overhead multiplier | Derived |
+| `throughput_tok_s` | Float | tokens/sec | Generation throughput | Artificial Analysis |
+| `ttfat_s` | Float | seconds | Time to First Answer Token | Artificial Analysis |
+| `node_energy_j_token` | Float | J/token | Compute energy consumed per generated token | Derived |
+| `facility` | String | — | Serving data center location when publicly available | Public disclosures |
+| `grid_basis` | String | — | Method used for grid intensity assignment (lookup, proxy, blend) | Study |
+| `grid_region` | String | — | EPA eGRID subregion used for emissions calculation | EPA eGRID2023 |
+| `grid_lb_mwh` | Float | lb CO₂e/MWh | Regional grid emissions factor | EPA eGRID2023 |
+| `grid_ug_j` | Float | μg CO₂e/J | Converted grid carbon intensity | Derived |
+| `cooling_method` | String | — | Cooling infrastructure classification | Public disclosures |
+| `pue` | Float | ratio | Power Usage Effectiveness assigned to facility | LBNL |
+| `confidence_compute` | String | — | Confidence level of compute assumptions | Study |
+| `confidence_grid` | String | — | Confidence level of grid assignment | Study |
+| `confidence_pue` | String | — | Confidence level of cooling/PUE assignment | Study |
+| `apei_gco2_token` | Float | g CO₂e/token | Final APEI score | Derived |
+| `query_carbon_500tok` | Float | g CO₂e/query | Carbon impact of a 500-token reasoning response | Derived |
+
+---
+
+# Compute Variables
+
+The compute pillar estimates the energy required to generate each token.
+
+| Variable | Units | Formula / Description |
+|---|---|---|
+| `chip_power_w` | W | Accelerator power draw from manufacturer specifications or inferred estimates |
+| `chips_per_node` | chips | Number of accelerators assigned per compute node |
+| `node_power_kw` | kW | `(chip_power_w × chips_per_node × 1.4) / 1000` |
+| `throughput_tok_s` | tokens/sec | Model generation throughput benchmark |
+| `node_energy_j_token` | J/token | `(node_power_kw × 1000) / throughput_tok_s` |
+
+---
+
+# Carbon Variables
+
+The carbon pillar converts energy consumption into emissions based on regional electricity generation.
+
+| Variable | Units | Description |
+|---|---|---|
+| `facility` | — | Serving data center location |
+| `grid_region` | — | Assigned EPA eGRID region |
+| `grid_lb_mwh` | lb CO₂e/MWh | Regional electricity emissions factor |
+| `grid_ug_j` | μg CO₂e/J | Converted emissions intensity |
+
+## Grid Conversion Formula
+
+The conversion from pounds of CO₂e per MWh to micrograms of CO₂e per joule is:
+
+\[
+I_{grid}=\frac{lb/MWh \times 453.592}{3.6\times10^9}
+\]
+
+Where:
+
+- `453.592` = grams per pound  
+- `3.6 × 10⁹` = joules per MWh  
+
+---
+
+# Cooling Variables
+
+Cooling overhead is represented through Power Usage Effectiveness (PUE).
+
+| Variable | Units | Description |
+|---|---|---|
+| `cooling_method` | — | Cooling classification (liquid, air, or unconfirmed) |
+| `pue` | ratio | Assigned Power Usage Effectiveness value |
+| `pue_source` | — | LBNL data category used for assignment |
+
+---
+
+# Final Metrics
+
+These variables represent the final outputs used in the APEI framework.
+
+| Variable | Units | Formula |
+|---|---|---|
+| `facility_energy_j_token` | J/token | `node_energy_j_token × pue` |
+| `apei_gco2_token` | g CO₂e/token | `facility_energy_j_token × grid_gco2_j` |
+| `query_carbon_500tok` | g CO₂e/query | `node_power × pue × grid × (TTFAT + 500/throughput)` |
+
+---
+
+# Validation Dataset
+
+## `batch_validation.csv`
+
+This dataset supports the batch inference validation experiment described in Section 5.7.
+
+| Column | Type | Units | Description |
+|---|---|---|---|
+| `batch_size` | Integer | requests | Number of simultaneous inference requests |
+| `energy_j_token` | Float | J/token | Energy consumption measured using Zeus |
+| `percent_batch1` | Float | % | Relative energy compared with batch size 1 |
+| `speedup` | Float | × | Throughput improvement factor |
+
+---
+
+# Confidence Classification
+
+Each assumption is assigned a confidence level based on evidence availability.
+
+| Confidence | Definition |
+|---|---|
+| **High** | Direct manufacturer specification or documented facility information |
+| **Medium** | Public evidence combined with engineering estimation |
+| **Low** | Conservative proxy due to unavailable information |
+
+---
+
+# Data Sources
+
+| Source | Variables Provided |
+|---|---|
+| Artificial Analysis | Throughput, TTFAT benchmarks |
+| NVIDIA | H100 accelerator power specifications |
+| Google | TPU architecture specifications |
+| AWS / Patel et al. (2024) | Trainium2 estimates |
+| EPA eGRID2023 | Regional carbon intensity |
+| Lawrence Berkeley National Laboratory (2024) | Power Usage Effectiveness assumptions |
+| SouthWings / Southern Environmental Law Center | Grok Colossus energy generation estimates |
+
+---
+
+# Repository Structure
+
+```text
+data/
+├── apei_dataset.csv              # Primary model dataset
+├── batch_validation.csv          # Zeus validation experiment
+├── regional_grid_intensity.csv   # EPA eGRID carbon intensity table
+├── pue_reference.csv             # PUE assignment references
+└── README.md                     # Dataset documentation
+
+docs/
+└── DATA_DICTIONARY.md            # Complete dataset documentation
+```
+
+---
+
+## Reproducibility Notes
+
+All derived variables can be regenerated from the raw input fields contained in the dataset. The repository preserves both original assumptions and calculated outputs to allow independent verification of APEI scores.
+
+The dataset structure follows reproducible research practices for computational sustainability studies.
