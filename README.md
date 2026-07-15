@@ -7,3 +7,8 @@ Frontier AI models are typically evaluated on capability and cost, with environm
 APEI is applied to five of the world's leading frontier large language models (OpenAI GPT 5.5, Anthropic Claude Opus 4.8, Google Deepmind Gemini 3.1 Pro, Meta Llama 4 Maverick, xAI Grok 4.3) using published throughput and time-to-first-answer-token (TTFAT) benchmarks mapped to model-specific data center infrastructure and eGRID subregion carbon emissions. Following analysis, it is determined that, compute efficiency, not grid location, is the dominant factor of per-token emissions: Grok 4.3, despite running on an on-site gas turbine grid with with a substantially higher carbon intensity than the U.S. average, achieves the lower emissions per token (0.0081 gCO2e token) due to higher throughput efficiency, which compensates for increased grid carbon intensity. On the other hand, Opus 4.8, operating on a coal-intensive grid and exhibiting the highest compute (reasoning) overhead in the set, is the highest emitter (0.0227 gCO₂e/token), yielding a 2.8× range in per-token emissions across the five models.
 
 No model in the sample dominates across all three pillars, suggesting that compute architecture, energy sourcing, and cooling infrastructure are not integrated nor optimized in current frontier systems. 
+
+
+## Conference Poster: 
+
+<img width="3456" height="2304" alt="pytorch poster-2" src="https://github.com/user-attachments/assets/781a101f-539c-4236-9294-d4f6f7e50aed" />
