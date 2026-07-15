@@ -11,4 +11,4 @@ No model in the sample dominates across all three pillars, suggesting that compu
 
 ## Conference Poster: 
 
-<img width="3456" height="2304" alt="pytorch poster-2" src="https://github.com/user-attachments/assets/781a101f-539c-4236-9294-d4f6f7e50aed" />
+<img width="3888" height="2592" alt="pytorch poster-3" src="https://github.com/user-attachments/assets/e7b4f81f-18bb-4ae8-89a3-d74950307130" />
