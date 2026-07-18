@@ -9,6 +9,6 @@ APEI is applied to five of the world's leading frontier large language models (O
 No model in the sample dominates across all three pillars, suggesting that compute architecture, energy sourcing, and cooling infrastructure are not integrated nor optimized in current frontier systems. 
 
 
-## Conference Poster: 
+## Conference Poster (draft- not finalized): 
 
 <img width="3888" height="2592" alt="pytorch poster-3" src="https://github.com/user-attachments/assets/e7b4f81f-18bb-4ae8-89a3-d74950307130" />
