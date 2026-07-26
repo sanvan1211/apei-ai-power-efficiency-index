@@ -36,26 +36,6 @@ The T4 is a single, older-generation device and is not representative of frontie
 
 ---
 
-## Results
-
-Per-token emissions across five frontier models:
-
-| Model | gCO₂e/token | Dominant factor |
-|---|---|---|
-| Grok 4.3 | 0.0081 | High throughput efficiency offsets carbon-intense on-site gas turbine grid |
-| TODO | TODO | TODO |
-| TODO | TODO | TODO |
-| TODO | TODO | TODO |
-| Claude Opus 4.8 | 0.0227 | Highest reasoning overhead in the set, on a coal-intensive grid |
-
-**Two findings.**
-
-Compute efficiency, not grid location, dominates per-token emissions. Grok 4.3 runs on a grid substantially more carbon-intense than the U.S. average and still achieves the lowest emissions in the set, because throughput efficiency more than compensates. The spread across the five models is 2.8×.
-
-No model leads on all three pillars. Compute architecture, energy sourcing, and cooling infrastructure appear to be optimized independently rather than jointly in current frontier deployments.
-
----
-
 ## Conference Poster (draft- not finalized): 
 
 <img width="3888" height="2592" alt="pytorch poster-3" src="https://github.com/user-attachments/assets/e7b4f81f-18bb-4ae8-89a3-d74950307130" />
