@@ -8,21 +8,6 @@ Most published AI-carbon figures are arithmetic on vendor spec sheets. This repo
 
 ---
 
-## Quickstart
-
-```bash
-git clone https://github.com/sanvan1211/apei-ai-power-efficiency-index.git
-cd apei-ai-power-efficiency-index
-pip install -r requirements.txt
-
-# Reproduce the T4 energy measurement (requires an NVIDIA GPU + Zeus)
-python TODO_measure.py --device 0 --model TODO --tokens 1000
-
-# Recompute the frontier-model APEI table from published inputs (no GPU needed)
-python TODO_compute_apei.py
-```
----
-
 ## What APEI computes
 
 APEI decomposes per-token emissions into three physically multiplicative pillars:
