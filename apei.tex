@@ -1,0 +1,784 @@
+%=======================================================================
+%  The AI Power Efficiency Index (APEI)
+%  Sanhith Vandara - July 2026
+%  LaTeX source. Figures are in the ./figures/ folder.
+%  Compile with: pdflatex apei.tex   (run twice for List of Figures/Tables)
+%  Editor: OpenAI Prism, Visual Studio Code 
+%=======================================================================
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\DeclareUnicodeCharacter{2082}{\ensuremath{{}_2}}
+\DeclareUnicodeCharacter{03BC}{\ensuremath{\mu}}
+\DeclareUnicodeCharacter{2013}{--}
+\usepackage[T1]{fontenc}
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[final]{graphicx}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage[table]{xcolor}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{textcomp}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xurl}
+
+\graphicspath{{./}{../}}
+
+% ---- block-paragraph layout (mirrors the original document) ----
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+\setlength{\emergencystretch}{2em}
+
+% ---- helper column types for wrapping table cells ----
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+
+% ---- shared macros ----
+\newcommand{\cotwo}{CO\textsubscript{2}}     % CO2 with subscript
+\definecolor{usavg}{HTML}{DCE9F5}            % light-blue shaded row
+
+% ---- caption style ----
+\captionsetup{font=small,labelfont=bf}
+
+\title{The AI Power Efficiency Index (APEI)\thanks{The index's full name, The Artificial Intelligence Power Efficiency Index, also abbreviates to TAIPEI (a nod to Taiwan's role as the physical hub of the AI hardware supply chain.)}: a framework for measuring per-token carbon emissions across frontier LLMs.}
+\author{Sanhith Vandara, Bishop Shanahan High School}
+\date{July 2026}
+
+\begin{document}
+
+\maketitle
+\vspace{-1.25em}
+
+\begin{center}
+\url{https://github.com/sanvan1211/apei-ai-power-efficiency-index}
+\end{center}
+
+\begin{abstract}
+Frontier AI models are typically evaluated on capability and cost, with environmental impact being a secondary consideration or reported in aggregate. The AI power efficiency index (APEI) is a framework for estimating per-token carbon emissions at inference time. APEI consists of three quantifiable pillars: compute efficiency (hardware throughput per watt), cooling overhead (facility PUE, power usage effectiveness), and carbon intensity (g\cotwo{} equivalent/joule). Rather than combining these into a weighted composite score, APEI computes their physical product; the result is a single unit, g\cotwo-equivalent per output token, that remains invariant to query length.
+
+APEI is applied to five of the world's leading frontier large language models (OpenAI GPT 5.5, Anthropic Claude Opus 4.8, Google Deepmind Gemini 3.1 Pro, Meta Llama 4 Maverick, xAI Grok 4.3) using published throughput and time-to-first-answer-token (TTFAT) benchmarks mapped to model-specific data center infrastructure and eGRID subregion carbon emissions. Following analysis, it is determined that compute efficiency, not grid location, is the dominant factor in per-token emissions: Grok 4.3, despite running on an on-site gas turbine grid with a substantially higher carbon intensity than the U.S. average, achieves the lowest emissions per token (0.00805 g\cotwo e/token) due to higher throughput efficiency, which compensates for increased grid carbon intensity. On the other hand, Opus 4.8, operating on a coal-intensive grid and exhibiting the highest compute cost per token in the set (the lowest generation throughput per watt), is the highest emitter (0.02273 g\cotwo e/token), yielding a 2.82$\times$ range in per-token emissions across the five models.
+
+No model in the sample dominates across all three pillars, suggesting that compute architecture, energy sourcing, and cooling infrastructure are neither integrated nor optimized in current frontier systems.
+\end{abstract}
+
+\newpage
+
+%=======================================================================
+%  SECTION I
+%=======================================================================
+\section*{Section I: Introduction}
+
+The computational demands of frontier AI systems have grown exponentially over the past several years. Driven by larger parameter counts, longer context windows, and increasingly compute-intensive reasoning capabilities, this growth has direct implications: training and using these models requires substantial electricity, much of it drawn from grids whose carbon intensities vary depending on regional power generation methods. Despite this, the environment remains a secondary point of evaluation. When new models are released, benchmark leaderboards highlight latency, cost-per-token, and task accuracy in detail, whereas carbon emissions (if reported at all) typically appear only as a single aggregate figure for an entire training run, disconnected from the per-query behavior that actually determines a model's operational footprint.
+
+This gap is significant because training and deployment are not interchangeable with their carbon metrics. A training run is a fixed one-time cost, and actual deployment is repeated billions of times across users and their specific needs, compounding with every query. A model that is expensive to train but is cheap to run on deployment may have a smaller lifetime footprint than one that is cheap to train but is inefficient at a larger scale. Ultimately, evaluating sustainability solely through aggregate training-run emissions fails to capture specific variations in deployment-time efficiency, and therefore limits insightful comparisons across models.
+
+APEI is designed to address this gap specifically. APEI factors the per-token carbon emissions into the product of these three pillars (compute efficiency, cooling overhead, and grid carbon intensity), rather than a weighted composite score. A weighted sum requires each pillar to first be normalized into a common, unitless scale since grid carbon intensity (measured in grams of carbon dioxide per joule) does not share units and cannot be added directly. This normalization, which can be achieved by a min-max rescaling, is a subjective choice with no other justification; it can also shift model ranking depending on performance. In addition, a weighted sum requires a researcher to assign and define specific weights for each pillar, disrupting neutrality. For example, weights that emphasize compute will produce a different ranking than weights that emphasize grid carbon or cooling overhead's power usage effectiveness. As a result, conclusions drawn from the weighted indices can be challenged on the grounds of bias or subjectivity.
+
+A (physical) product avoids this problem; it originates directly from physics rather than the judgement of a researcher: energy per token is the ratio of node power (total electricity consumption) to throughput (rate of productive output per unit time), scaled by cooling overhead (PUE), and carbon per token is that energy multiplied by the grid's carbon intensity. Here, no normalization step is required. The units cancel each other at each step, eventually yielding grams of \cotwo{} equivalent per token. After results, it is determined that compute efficiency dominates the spread in per-token emissions. This result does not occur because it is weighted more heavily, but rather because it varies substantially more across the five models than either cooling or carbon intensity.
+
+%=======================================================================
+%  SECTION II
+%=======================================================================
+\section*{Section II: Literature Review}
+
+\subsection*{2.1 Cross-Study Evidence of Wide Variance in Inference-Time Energy and its Limitations}
+
+Recent work in ML carbon accounting has shifted away from training and toward inference as these studies revolve around a single finding: per-query energy and carbon emissions vary substantially across models, and far more than parameter count alone would predict. Jegham, Abdelatti, Koh, Elmoubarki, and Hendawi (2025, arXiv v1) found a seventy-fold spread in per-query energy across thirty frontier models using an infrastructure-aware approach that integrates open source API performance data along with company-specific environmental factors. In another study, Luccioni, Jernite, and Strubell (2024) similarly demonstrate that multi-purpose generative models exhibit substantially higher energy requirements per query than task-specific systems performing equivalent functions. Importantly, this disparity continues after accounting for model size and expands alongside output length. Samsi et al. (2023) support this variance using direct hardware-level instrumentation rather than API-derived proxies. This suggests the finding is not an artifact of any single measurement method. Across these studies, there is a strong agreement that inference-time energy use varies in a real and consistent way, rather than being an example of how benchmarks are designed.
+
+However, they all share a similar limitation: none of them fully explain the source of this variation from a physical level. Jegham et al. use Data Envelopment Analysis to compare model efficiency, but they do not separate the effects of the model's compute architecture from the data center it is currently being operated in. Luccioni et al. attribute these differences primarily to the model architecture, and task characteristics, while leaving cooling overhead and grid carbon out of the larger picture. Similarly, Samsi et al. examine inference-energy consumption within a controlled hardware environment, but do not extend their analysis to facility or grid levels that ultimately determine real-world carbon emissions when in deployment.
+
+APEI adopts the same direct-measurement approach as these publications, using Zeus (You, Chung, \& Chowdhury, 2023) to test the throughput-to-energy relationship across batch-size and sensitivity sweeps. Its key contribution to this body of work, however, is the explicit separation of deployment energy into distinct components, in contrast to prior studies that quantify energy consumption as a single aggregate value.
+
+\subsection*{2.2 Training-time Carbon Emissions Measurement}
+
+The majority of established work on AI carbon emissions focuses on model training rather than actual deployment. A study by Strubell, Ganesh, and McCallum (2019) defined this area by estimating the financial and environmental cost of training modern natural language processing (NLP) models and contextualizing these costs using comparisons such as lifetime emissions. Patterson et al. (2021) extended this analysis to larger-scale models including Google's T5, Meena, GShard (a Mixture of Experts (MoE) transformer), Switch Transformer and OpenAI's GPT-3 and demonstrated that training emissions can be reduced through a variety of techniques including sparse activation, geographically optimized scheduling, and the use of specialized accelerator hardware. Luccioni, Viguier, and Ligozat (2023) further expanded this methodology by incorporating full lifecycle training emission for BLOOM (BigScience Large Open-science Open-access Multilingual Language Model), including the carbon emissions associated with the manufacturing of supporting hardware in addition to operational deployment energy usage.
+
+This literature is methodologically mature and internally consistent in its core finding: training large and highly capable models is carbon-intensive, and the cost depends on hardware choice, sparsity, and data center geographical location. Its main limitation, for the purpose of APEI, is not the methodological weakness, rather it is the mismatch of scope. Training is a one-time cost amortized over a model's lifetime, and while inference operates continuously at the scale of billions of queries per day, it accumulates with each request. As a result, a model that is expensive to train but efficient to operate may have a lower net footprint than one that is cheap to train but inefficient at deployment scale: something training-only accounting is unable to capture because it excludes inference entirely. This literature is cited out of acknowledgement and clarification of this boundary, not to extend upon it; APEI focuses solely on inference-time emissions.
+
+\subsection*{2.3 The Persisting Reporting Gap in Deep Learning Carbon Accounting}
+
+Another group of studies provides insights, rather than measurement, drawing attention to the lack of systemic quantification of the patterns associated in existing work. Henderson, Hu, Romoff, Brunskill, Jurafsky and Pineau (2020) surveyed one hundred randomly sampled NeurIPS 2019 papers and found that none reported carbon emission impacts, only one reported any energy-use metric and seventeen reported at least some compute-related metric. Their proposed solution is a real-time tracking tool as well as a leaderboard-like format; this is effective precisely because it accounts for the researcher's own training run directly.
+
+While it is a major strength, it is also the approach's limiting factor for the purpose of APEI: it assumes access to the direct hardware running the model. Proprietary, API-served frontier models (the five models evaluated in APEI) do not expose such access; researchers outside OpenAI, Anthropic, Google Deepmind/Google Research, Meta or xAI cannot evaluate directly on their inference servers. As a result, Henderson et al.'s framework cannot be applied to the class of the models studied in this paper.
+
+\subsection*{2.4 Cooling Overhead and Power Usage Effectiveness (PUE) in Infrastructure}
+
+APEI's cooling pillar rests on the premise that facility-level cooling overhead, measured as PUE (the ratio of total facility power to the power delivered to hardware), is sufficiently large and variable across facilities to matter empirically. The United States Department of Energy and University of California's Lawrence Berkeley National Laboratory data center studies provide the strongest evidence for this. Masanet et al. (2020) established at a micro scale that data center energy use grew far more slowly than computing demand over the preceding decade. Shehabi et al. (2024) in the congressionally mandated 2024 United States Data Center Energy Usage Report (LBNL-2001637), extends this analysis into the era of artificial intelligence and deep learning computing. They model PUE separately by cooling system and facility class -- hyperscale, midsize, liquid-cooled AI-- rather than treating it as a single industry constant.
+
+The limitation, for the purpose of this paper, is resolution: Shehabi et al. report PUE at the level of facility categories, which is sufficient for national accounting but does not resolve the named facilities of individual providers. This information is not publicly disclosed, and therefore cannot be supported. Accordingly, APEI operates within this constraint, rather than against it. In this study, we assign each model the category-level PUE which corresponds to its inferred facility class from Shehabi et al. (2024). This yields values between 1.08 and 1.19, instead of assuming precise, facility-specific values that are not publicly available. The cooling pillar is also the lowest-variance component of APEI's three pillars, an outcome modeled in Section 5.3 of this study, but leaves model rankings unaffected.
+
+%=======================================================================
+%  SECTION III
+%=======================================================================
+\section*{Section III: Methodology}
+
+APEI estimates the carbon emitted per token of generated output for a frontier model at inference time. Conceptually, it is a fuel-economy figure for carbon: just as miles per gallon (MPG) captures how efficiently a vehicle converts fuel into distance, g\cotwo e per token measures how much carbon a model emits to produce a fixed unit of output (for LLMs, tokens). This precise unit is a physical product of three independently measured pillars: compute efficiency (the energy a hardware node (server) emits per token), net cooling overhead (the facility-level factor on the amount of energy consumed to cool the node), and grid carbon intensity (the emissions produced per unit of energy a facility draws). The three pillars carry incompatible units (joules per token, a dimensionless ratio, and grams of \cotwo{} equivalent per joule) and cannot be summed without a normalization step. By contrast, their product removes this disparity and yields the final unit of grams of \cotwo{} equivalent per token. We therefore report APEI as this product rather than a weighted sum; this permits each model's result to be traced back to the pillar of origin.
+
+When this framework is applied to five frontier models, GPT-5.5, Claude Opus 4.8, Gemini 3.1 Pro, Llama 4 Maverick and Grok 4.3, each mapped to its specific hardware, data center facility, and electrical grid, or, when these values are undisclosed, the most probable values are drawn from a single benchmark source to ensure consistency. All carbon figures are reported as \cotwo-equivalent (\cotwo e) using EPA eGRID2023 subregion emission rates. The remainder of this section is the specification of each pillar. We report this as the primary metric of the carbon cost associated only with token generation.
+
+\subsection*{3.1 Pillar 1: Compute Efficiency}
+
+The compute pillar measures the energy a hardware node uses to generate one output token, the hardware-efficiency metric of the index. This can be described as the ratio of a node's power draw to its token-generation rate:
+\[
+E_{\text{node/token}} = \frac{P_{\text{node}}}{T} \qquad (\text{joules per token})
+\]
+Where $P_{\text{node}}$ is the node power in watts and $T$ is the throughput in tokens per second. The units cancel out directly, so no normalization is required.
+
+\subsubsection*{3.1.1 Node Power Estimations:}
+
+\[
+\text{Node Power} = (\text{chips per node}) \times (\text{chip power in W}) \times 1.4\ (\text{constant})
+\]
+
+Chips per node: how many accelerator chips (GPU/TPU etc.) are in one server node.
+
+Chip power: the per-chip power draw in watts.
+
+1.4 constant: the overhead multiplier: a 40\% addition for all other factors in the node that are not in the chips themselves (CPU, memory, networking, power-supply variations). This constant is applied across all five models to ensure neutrality in comparisons.
+
+The resulting per-model values are reported in Section 4.1: Dataset. Per-chip power is published by the manufacturer only for H100 (700 W SXM TDP, NVIDIA Corporation, 2023). The TPU v7 and Trainium2 figures are statistically inferred. The former from pod-level specifications (a 9,216 chip pod rated at 10 MW implies roughly 1,000 W per chip) and the latter from a third-party analysis (Patel et al., 2024), as neither AWS nor Google publishes per-chip power. The TPU node size of eight chips is a normalization choice rather than a published configuration; these inferences are noted as limitations in Section 6.2.1 and are tested in the sensitivity analysis.
+
+\subsubsection*{3.1.2 Throughput and the generation/reasoning distinction}
+
+Throughput $T$ is the model's steady-state output speed in tokens per second, drawn from Artificial Analysis (accessed 18 June 2026). This value uses the generation-phase output speed, the rate at which a model starts responding to the query, as the primary metric. Thus, the compute pillar is a measure of intrinsic generation efficiency. Because token count appears neither in the numerator nor denominator of the per-token energy, the resulting value is independent of how long a given query or response may be.
+
+This choice separates two distinct quantities that a single per-query number would conflate. Modern reasoning deep learning models consume substantial amounts of energy before emitting their first output token, during an initial ``thinking'' phase. This figure can be captured by time-to-first-answer-token (TTFAT). This reasoning energy can be substantial for some models. However, it is not a property of generation efficiency, and it scales with reasoning effort rather than with output length. We therefore exclude it from the compute pillar's primary per-token metric and account for it separately at the query level in a thinking-inclusive metric (found in Section 3.4.1), which draws on the TTFAT values reported in the same dataset by Artificial Analysis.
+
+\subsubsection*{3.1.3 The Resulting per-token Energy}
+
+Combining node power with inference-time generation throughput yields each model's compute-pillar energy per token. The spread is wide: Grok 4.3 and Gemini 3.1 Pro, with throughputs of 152 and 123 tokens per second, respectively, achieve substantially lower energy per token than GPT-5.5 and Claude Opus 4.8, at 56 and 62 tokens per second, respectively. These values become the compute input to the full index in Section 3.4.1.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{fig1_energy_per_token.png}
+  \caption{Energy per Token as the Fundamental Unit of LLM Inference Efficiency.}
+  \label{fig:energy-per-token}
+\end{figure}
+
+\subsection*{3.2 Grid Carbon Intensity}
+
+The carbon pillar measures the \cotwo{} emissions produced per unit of electrical energy a model's data center draws from its grid; this value is represented by \emph{grams of \cotwo-equivalent per joule (g\cotwo e / J)}. It converts the energy values established by the compute and cooling pillars to actual emitted carbon. It is the only pillar that depends on the geographical location of where the model is deployed rather than how it is served.
+
+\subsubsection*{3.2.1 Source and Units}
+
+Grid carbon intensities are drawn from the U.S. Environmental Protection Agency's (EPA) eGRID2023 (Revision II) dataset, the official public record of emission rates for U.S. electricity subregions. This figure is derived using the total-output \cotwo-equivalent emission rate, which incorporates methane and nitrous oxide alongside carbon dioxide, rather than \cotwo- only. For a climate-impact metric, the \cotwo e basis is most applicable since non-\cotwo{} greenhouse gas emissions from electricity carry a significant warming potential (IPCC, 2021). EPA's eGRID publishes these rates in pounds per megawatt-hour (lbs/MWh); APEI converts them to grams per joule with this formula:
+\[
+I_{\text{grid}} = \frac{R_{\text{lb/MWh}} \times 453.592\ \text{g/lb}}{3.6 \times 10^{9}\ \text{J/MWh}}
+\]
+With this conversion, the carbon pillar combines dimensionally with the joules-per-token quantity from the preceding pillars to yield grams of \cotwo{} per token.
+
+\subsubsection*{3.2.2 Facility-to-grid mapping}
+
+Each model is assigned a grid carbon intensity by identifying its serving facility (data center) and the eGRID subregion containing it (at the level of confidence the public data supports). The five frontier models fall into three evidentiary categories. Claude Opus 4.8 is served from a documented primary facility (Project Rainier, New Carlisle, Indiana) in the coal-heavy RFCW subregion, and is assigned that subregion's published rate of 916 lb \cotwo e/MWh with high confidence. GPT-5.5 is served from the Stargate site in Abilene, Texas, within the ERCOT (Electric Reliability Council of Texas--ERCT) subregion; we assign it the ERCT rate of 736.6 lb \cotwo e/MWh, noting that the site supplements grid power with on-site wind, solar, and battery storage (which likely lowers its true intensity) and that a documented on-site gas plant operates as backup rather than baseload power. Gemini 3.1 Pro and Llama 4 Maverick are served from undisclosed facilities; absent a confirmable location, each is assigned the U.S. average rate of 770.9 lb \cotwo e/MWh as a conservative proxy. Grok 4.3, however, is the one model whose carbon intensity is not in an eGRID subregion dataset. Its serving facility, Colossus, hosts an estimated 35 on-site simple-cycle gas turbines (roughly 421 MW capacity), documented via aerial thermal survey (SouthWings / Southern Environmental Law Center), supplemented by roughly 300 MW of grid supply from the surrounding SRTV subregion. Because this on-site gas is consumed directly and does not appear in any grid-average emission rate, a standard eGRID datapoint would understate the true carbon intensity of Grok. A blended estimate of 1,050 lb \cotwo e/MWh, combining the documented grid supply with an on-site gas emission factor of approximately 1,150--1,250 lb \cotwo e/MWh, is assigned to Grok. This value exceeds the dirtiest grid subregion in the reference set because it reflects dedicated fossil fuel generation rather than grid averages. It is reported as an estimate: the on-site turbines are documented, but their heat rate and capacity are inferred, and the grid-to-gas blend is approximate.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{fig2_grid_carbon_serving.png}
+  \caption{Grid Carbon Intensity by Model Serving Location.}
+  \label{fig:grid-serving}
+\end{figure}
+
+\subsection*{3.3 Pillar 3: Cooling Overhead and Power Usage Effectiveness (PUE)}
+
+The cooling overhead measures the facility-level energy consumption required to operate and cool a model's supporting hardware, the multiplier that converts the power drawn by the compute node into the total power drawn from the grid. The metric that captures this is power usage effectiveness (PUE), the ratio of total facility power to the power delivered to hardware. A PUE of 1.10, for example, means that every watt reaching the hardware is accompanied by 0.10 W of overhead for cooling, power conversion, and other usage. PUE is the facility multiplier in the index: a facility's effective per-token energy is its compute energy per token scaled by its PUE.
+
+Per-facility PUE is not disclosed by any of the five model providers. To work around this, PUE values are drawn from published category data in the Lawrence Berkeley National Laboratory 2024 \emph{United States Data Center Energy Usage Report} (Shehabi et al., 2024), specifically its Figure 4.5, which reports aggregate PUE across facility-type categories accounting for cooling-system mix and facility location. The relevant category for frontier models is ``AI Specialized,'' which the report assigns a median PUE of 1.14, within a range of 1.08 to 1.19---substantially lower than the report's midsize (1.68 median) or small (1.91 median) facility categories. This reflects the fact that AI and deep learning workloads are concentrated in modern, thermally efficient facilities.
+
+\subsubsection*{3.3.1 Per-model PUE assignment}
+
+Within the AI Specialized range, each model is assigned a PUE according to its confirmed cooling method. A common trend that can be observed is that liquid-cooled facilities achieve lower overhead than their air-cooled counterparts. Models served on confirmed liquid-cooled hardware (Claude Opus 4.8 on Project Rainier, Gemini 3.1 Pro on TPU v7) are assigned the low end of the range, 1.09, with high confidence. Grok 4.3, served on confirmed air-cooled H100 hardware at Colossus, is assigned the high end, 1.18, also with high confidence. The two models whose cooling architecture cannot be confirmed (GPT-5.5 and Llama 4 Maverick) are assigned to the category median of 1.14 as a proxy. These two assignments are the pillar's primary limitation and are recorded in Section 6: Limitations.
+
+\subsection*{3.4 Computing AI Power Efficiency Index (APEI)}
+
+The three pillars from above combine into a single per-token carbon figure as their physical product. The APEI metric in general form is:
+\[
+\text{APEI} = \prod_{i=1}^{3} p_i
+\]
+Applied to the compute, cooling, and grid pillars, this yields the primary metric:
+\[
+\text{gCO}_2\text{e / token} = \left(\frac{P_{\text{node}}}{T}\right) \times (\text{PUE}) \times (I_{\text{grid}})
+\]
+Here $P_{\text{node}}$ is node power (W), $T$ is generation throughput (tokens/second), PUE is the dimensionless cooling ratio, and $I_{\text{grid}}$ is carbon intensity (g\cotwo e/J).
+
+The product form is a dimensional identity rather than a modeling preference. The units resolve end-to-end with no normalization step: node power divided by throughput yields joules per token; multiplication by the dimensionless PUE leaves the quantity in joules per token, now inclusive of facility overhead; multiplication by grid intensity in grams of \cotwo e per joule yields grams of \cotwo e per token, with the joule units cancelling exactly. No pillar is assigned a weight nor additional weights, because none is required. Each model's final figure is the literal physical composition of its three measures and can be decomposed back into each pillar; a weighted composite score does not maintain this traceability.
+
+It is often convenient to compute this metric in two stages, isolating facility-grade energy per token before applying the grid intensity.
+\[
+\text{J/token} = \frac{P_{\text{node}}}{T} \times \text{PUE}, \qquad
+\text{gCO}_2\text{e/token} = \text{J/token} \times I_{\text{grid}}
+\]
+The grid intensity itself is converted from the units in which eGRID publishes it, pounds of \cotwo e per megawatt-hour, to grams per joule by:
+\[
+I_{\text{grid}} = \frac{R_{\text{lb/MWh}} \times 453.592\ \text{g/lb}}{3.6 \times 10^{9}\ \text{J/MWh}}
+\]
+This primary metric is query-length independent because the output token count appears in neither the numerator nor denominator; the result is invariant to how long any individual response happens to be. It therefore isolates a model's per-token efficiency during the generation phase, independent of the prompt input or output length.
+
+\subsubsection*{3.4.1 Thinking-Inclusive Carbon Per Query}
+
+The primary metric deliberately excludes the energy a model consumes before emitting its first token (during its internal reasoning phase). To account for this, a secondary, query-level metric is created, incorporating reasoning time. For a query producing $N$ output tokens, total active time is the reasoning latency in addition to the generation time:
+\[
+t_{\text{total}} = \text{TTFAT} + \frac{N}{T}
+\]
+where TTFAT is the time to first answer token: the elapsed time until the model begins emitting its final response to the user. For a reasoning model, this interval encompasses the internal thinking phase, and the node draws power throughout it while producing no user-visible output.
+
+\subsection*{3.5 Validation of Specification-Based Energy Estimates and Analysis of Batching Effects in Deployment}
+
+We validate APEI's compute pillar against direct hardware measurement. Because the five frontier models are deployed on inaccessible proprietary infrastructure, their per-token energy cannot be measured directly and must instead be estimated from published hardware specifications via the node-power formula (Section 3.1).
+
+To test that this estimation approach is reasonable, we conduct two controlled experiments on remote access hardware (via Google Colaboratory) that we do control, an open-weights model, Alibaba's Qwen2.5-3B-Instruct, run on an NVIDIA Tesla T4 GPU, with energy measured using Zeus (You, Chung, \& Chowdhury, 2023), a framework that records real-time GPU power draw and performance through NVIDIA's onboard telemetry. The first experiment is a validation of the estimation procedure itself, comparing the energy the formula predicted against the energy Zeus measures for the same workload.
+
+The second experiment evaluates a source of bias in APEI's input data rather than in its formula. The throughput values APEI relies on are drawn from single-request API benchmarks, which measure a model responding to one query at a time. Frontier systems, however, compute many requests concurrently in a process known as batching. Processing in parallel is how providers make inference economical and optimized at scale. To quantify the effect of batching on energy efficiency, energy consumption per token was measured using the same model (Qwen2.5-3B-Instruct) and GPU (T4), across four batch sizes: 1, 4, 8, 16 concurrent requests. This effect originates from the GPU's relatively high baseline power draw, which changes little as additional requests are added; a GPU consumes substantial power just by remaining active. Serving more requests in parallel therefore spreads that fixed power cost across a broader set of output tokens, thereby lowering the energy allocated to each individual token. Since APEI's per-token energy is inversely proportional to throughput from single request conditions, this experiment examines how batching influences per-token energy consumption and whether this (APEI) framework overestimates emissions in real-world applications. These results are discussed in Section 5.7.
+
+%=======================================================================
+%  SECTION IV
+%=======================================================================
+\section*{Section IV: Dataset}
+
+This section of the paper consolidates every input value for the APEI computation, with its source, and confidence level, followed by the derived or implied quantities. All performance data are drawn from a single benchmarking source (Artificial Analysis, accessed 18 June 2026) to ensure internal consistency. Also, all grid intensities are from EPA eGRID2023 (Revision II); all PUE values are from University of California and U.S. Department of Energy's Lawrence Berkeley National Laboratory's 2024 U.S. Data Center Energy Usage Report (Shehabi et al., 2024).
+
+\subsection*{4.1 Compute Efficiency}
+
+The compute pillar draws on two inputs per model: throughput (derived from benchmark data) and node power (derived from manufacturers' hardware specifications). Throughput and time-to-first-answer tokens are from Artificial Analysis (accessed 18 June 2026); node power is computed from per-chip power and node size via the derivation in Section 3.1.1.
+
+\subsubsection*{4.1.1 Performance Data (Artificial Analysis)}
+
+Throughput is the steady-state output speed in tokens per second; TTFAT (time to first answer token) is a metric to capture latency until the model begins emitting its final response. All five models are evaluated at their highest available reasoning tier.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabularx}{\textwidth}{@{}l l c c L@{}}
+    \toprule
+    \textbf{Model} & \textbf{Reasoning tier} & \textbf{TTFAT (s)} & \textbf{Throughput (tok/s)} & \textbf{Data basis} \\
+    \midrule
+    GPT-5.5          & high                   & 21.0 & 56  & first-party API \\
+    Gemini 3.1 Pro   & sole tier              & 18.2 & 123 & first-party API \\
+    Claude Opus 4.8  & max (only option)      & 25.0 & 62  & first-party API \\
+    Llama 4 Maverick & sole (non-reasoning)   & 1.0  & 93  & median across providers \\
+    Grok 4.3         & high                   & 11.7 & 152 & first-party API \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Performance characteristics of five frontier models at maximum reasoning tiers. Throughput and TTFAT range from 56--152 tok/s and 1.0--25.0 s, respectively, derived from Artificial Analysis (June 2026) and first-party APIs.}
+  \label{tab:performance}
+\end{table}
+
+\subsubsection*{4.1.2 Node Power Derivation}
+
+Node power follows $P_{\text{node}} = (\text{chips/node}) \times (\text{chip power}) \times 1.4$, with the 1.4 being the constant held across all models.
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{@{}L L c L c c@{}}
+    \toprule
+    \textbf{Model} & \textbf{Chip} & \textbf{Chip power} & \textbf{Power source} & \textbf{Chips/node} & \textbf{Node power} \\
+    \midrule
+    GPT-5.5          & NVIDIA H100        & 700 W   & NVIDIA published   & 8  & 7.84 kW \\
+    Grok 4.3         & NVIDIA H100        & 700 W   & NVIDIA published   & 8  & 7.84 kW \\
+    Llama 4 Maverick & NVIDIA H100        & 700 W   & NVIDIA published   & 8  & 7.84 kW \\
+    Gemini 3.1 Pro   & TPU v7 (Ironwood)  & 1,000 W & Inferred (pod math)& 8  & 11.2 kW \\
+    Claude Opus 4.8  & AWS Trainium2      & 500 W   & Patel et al. (2024) & 16 & 11.2 kW \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Node power derivation by model, showing chip specifications, per-chip power draw, source attribution, and resulting node-level power.}
+  \label{tab:nodepower}
+\end{table}
+
+Per-chip power is published by the manufacturer only for the H100 (700 W SXM TDP). The TPU v7 figure ($\sim$1,000 W) is inferred from pod-level specifications (a 9,216-chip pod rated at approximately 10 MW), while the Trainium2 figure (500 W) is from third-party analysis (Patel et al., 2024), as neither Google Research nor Amazon Web Services (AWS) publishes per-chip power. The Trainium2 node size of 16 chips is AWS-published; the TPU node size of 8 chips is a normalization estimate rather than a published configuration. These inferences are recorded in Section 6.2: Limitations and Scope, and stress tested in the sensitivity analysis.
+
+\subsubsection*{4.1.3 Derived Compute Energy}
+
+Combining node power with throughput yields each model's node-level energy per token, the compute pillar's output before facility overhead.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{@{}l c c c@{}}
+    \toprule
+    \textbf{Model} & \textbf{Node power (kW)} & \textbf{Throughput (tok/s)} & \textbf{Node J/token} \\
+    \midrule
+    Grok 4.3         & 7.84 & 152 & 51.58 \\
+    Llama 4 Maverick & 7.84 & 93  & 84.30 \\
+    Gemini 3.1 Pro   & 11.2 & 123 & 91.06 \\
+    GPT-5.5          & 7.84 & 56  & 140.00 \\
+    Claude Opus 4.8  & 11.2 & 62  & 180.65 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Node energy per output token, derived from node power and benchmark throughput. Values span 51.6--180.7 J/token across the five models.}
+  \label{tab:derivedcompute}
+\end{table}
+
+The 3.5$\times$ spread in the node-level energy per token (51.58 to 180.65) is the widest of any single pillar. In addition, it is the primary driver of the cross-model differences developed in Section 5.4:
+
+\subsection*{4.2 Carbon Intensity}
+
+The carbon pillar assigns each model a grid carbon intensity in \cotwo-equivalent, sourced from the U.S. Environmental Protection Agency (EPA) eGRID2023 (Revision 2, released 12 June 2025), using total-output \cotwo e emission rate (column SRC2ERTA), which incorporates methane and nitrous oxide alongside carbon dioxide.
+
+\subsubsection*{4.2.1 eGRID2023 reference values}
+
+The relevant subregions and their published emission rates, in both the units of eGRID reports (kg/MWh) and the units used throughout this paper (lb/MWh), are listed in Table~\ref{tab:egrid-ref}.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{@{}l l c c@{}}
+    \toprule
+    \textbf{Subregion} & \textbf{Region} & \textbf{kg \cotwo e/MWh} & \textbf{lb \cotwo e/MWh} \\
+    \midrule
+    RFCW         & Indiana / Midwest (coal-heavy) & 415.5 & 916.1 \\
+    SRTV         & Tennessee Valley               & 409.7 & 903.3 \\
+    ERCT         & ERCOT / Texas                  & 334.1 & 736.6 \\
+    U.S. average & ---                            & 349.7 & 770.9 \\
+    NWPP         & Pacific Northwest              & 288.2 & 635.3 \\
+    SRVC         & Carolinas                      & 270.5 & 596.4 \\
+    CAMX         & California                     & 195.1 & 430.0 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Regional grid emission factors in kg and lb \cotwo e per MWh. Values range from 195.1 (California) to 415.5 (Midwest), reflecting regional generation-mix variation.}
+  \label{tab:egrid-ref}
+\end{table}
+
+\subsubsection*{4.2.2 Per-model Grid Carbon Assignment}
+
+Each model is mapped to a grid intensity according to the confidence its public disclosure supports across three tiers: documented lookup, conservative proxy, and constructed blend. For the two proxies (Gemini 3.1 Pro and Llama 4 Maverick), the U.S. national average is assigned as the anchor.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabularx}{\textwidth}{@{}l L L c L@{}}
+    \toprule
+    \textbf{Model} & \textbf{Facility} & \textbf{Grid basis} & \textbf{Anchor (lb \cotwo e/MWh)} & \textbf{Confidence Score} \\
+    \midrule
+    Claude Opus 4.8  & Project Rainier, New Carlisle, IN & RFCW lookup            & 916   & High (documented site) \\
+    GPT-5.5          & Stargate, Abilene, TX             & ERCT lookup            & 736.6 & Low (multi-site, partial disclosure) \\
+    Gemini 3.1 Pro   & Undisclosed                       & U.S.-average proxy     & 770.9 & Low (proxy) \\
+    Llama 4 Maverick & Undisclosed                       & U.S.-average proxy     & 770.9 & Low (proxy) \\
+    Grok 4.3         & Colossus, Memphis, TN             & SRTV + on-site gas blend & 1,050 & Medium (gas documented, capacity estimated) \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Grid carbon-intensity anchors by model facility. Values range from 736.6 to 1,050 lb \cotwo e/MWh across documented lookups, proxies, and a constructed gas blend.}
+  \label{tab:grid-assignment}
+\end{table}
+
+\subsubsection*{4.2.3 Behind-the-Meter Generation (Grok 4.3)}
+
+Grok is the one anchor that is not based on a direct eGRID lookup. Its serving facility, Colossus, hosts an estimated 35 on-site simple-cycle gas turbines (roughly 421 MW capacity), documented via aerial thermal survey (SouthWings / Southern Environmental Law Center), and is supplemented by roughly 300 MW of grid supply from the surrounding SRTV subregion. Using an on-site emissions factor of approximately 1,150--1,250 lb \cotwo e/MWh, the grid-plus-gas blend yields the 1,050 lb \cotwo e/MWh anchor, which exceeds every subregion in the dataset reference table. This is most likely because the site relies on dedicated on-site fossil fuel generation, which is not reflected in any grid average.\footnote{On-site gas turbines documented via aerial thermal survey; heat rate and capacity factor estimated. Grid-to-gas blend is approximate.}
+
+\subsubsection*{4.2.4 Derived Carbon Intensity}
+
+Each anchor is converted from lb/MWh to microgram \cotwo e/J for combination with the energy pillars, via $I_{\text{grid}} = (R_{\text{lb/MWh}} \times 453.592)/(3.6 \times 10^{9})$:
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{@{}l c c@{}}
+    \toprule
+    \textbf{Model} & \textbf{Anchor (lb \cotwo e/MWh)} & \textbf{Grid intensity ($\mu$g \cotwo e/J)} \\
+    \midrule
+    GPT-5.5          & 736.6 & 92.81 \\
+    Gemini 3.1 Pro   & 770.9 & 97.13 \\
+    Llama 4 Maverick & 770.9 & 97.13 \\
+    Claude Opus 4.8  & 916   & 115.41 \\
+    Grok 4.3         & 1,050 & 132.30 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Grid carbon intensities by model, converted from regional emission-factor anchors to $\mu$g \cotwo e/J. Values span 92.81--132.30 $\mu$g \cotwo e/J across the five LLMs.}
+  \label{tab:derived-carbon}
+\end{table}
+
+\subsection*{4.3 Cooling Overhead}
+
+The cooling pillar assigns each model a PUE (Power Usage Effectiveness), the ratio of total facility power drawn to power delivered to compute hardware. Values are sourced from the University of California and U.S. Department of Energy's Lawrence Berkeley National Laboratory 2024 U.S. Data Center Energy Usage Report (Shehabi et al., 2024), Figure 4.5, which reports aggregate PUE by facility category accounting for cooling-system mix and location.
+
+Published reference values (LBNL Figure 4.5). Frontier inference falls in the AI Specialized category; the other categories are shown for context.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{@{}l c c@{}}
+    \toprule
+    \textbf{Facility category} & \textbf{Median PUE} & \textbf{Range} \\
+    \midrule
+    AI Specialized       & 1.14 & 1.08 -- 1.19 \\
+    Hyperscale           & 1.22 & 1.14 -- 1.28 \\
+    Midsize / Colocation & 1.68 & 1.55 -- 1.90 \\
+    Small                & 1.91 & 1.78 -- 2.14 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Median PUE by facility category.}
+  \label{tab:pue-ref}
+\end{table}
+
+\subsubsection*{4.3.1 Per-Model assignment}
+
+Each model is placed within the AI Specialized range by its confirmed cooling method: liquid cooling at the low end (1.09), air cooling at the high end (1.18), and unconfirmed facilities at the category median (1.14) as a fallback standard.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabularx}{\textwidth}{@{}l L c l@{}}
+    \toprule
+    \textbf{Model} & \textbf{Cooling method (evidence)} & \textbf{PUE} & \textbf{Confidence} \\
+    \midrule
+    Claude Opus 4.8  & Liquid (Project Rainier confirmed) & 1.09 & High \\
+    Gemini 3.1 Pro   & Liquid (TPU v7 confirmed)          & 1.09 & High \\
+    Grok 4.3         & Air (H100 Colossus confirmed)      & 1.18 & High \\
+    GPT-5.5          & Unconfirmed (AI Specialized median)& 1.14 & Low (fallback) \\
+    Llama 4 Maverick & Unconfirmed (AI Specialized median)& 1.14 & Low (fallback) \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Model-specific PUE assignments based on confirmed cooling infrastructure or AI Specialized median fallback.}
+  \label{tab:pue-assignment}
+\end{table}
+
+The entire AI Specialized range spans only 1.08 to 1.19; the PUE has the lowest variance of all three pillars: even an incorrect fallback assignment shifts the final per-token carbon figure by at most a few percent. This is far less than the variation contributed by the compute or carbon pillars. The two fallback assignments (GPT and Llama) are explained in Section 6.2.3: Limitations.
+
+\subsection*{4.4 Batch-Size Sensitivity (Validation) Data}
+
+The values below are the direct energy-per-token measurements from the batch-size sweep (Section 3.5), recorded by Zeus on a Qwen2.5-3B-Instruct model running on a single Tesla T4 GPU, across twelve prompts at each batch size. Unlike the five frontier models' compute figures, which are estimated from hardware specifications, these are measured values from the Qwen2.5-3B-Instruct model.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{@{}c c c c@{}}
+    \toprule
+    \textbf{Batch size} & \textbf{J/token} & \textbf{\% of batch-1} & \textbf{Speedup} \\
+    \midrule
+    1  & 3.57 & 100\% & 1.0$\times$ \\
+    4  & 1.21 & 34\%  & 2.95$\times$ \\
+    8  & 0.63 & 18\%  & 5.67$\times$ \\
+    16 & 0.31 & 9\%   & 11.5$\times$ \\
+    \bottomrule
+  \end{tabular}
+  \caption{Measured batch-size sensitivity for Qwen2.5-3B-Instruct on a single Tesla T4 GPU.}
+  \label{tab:batch-size-sensitivity}
+\end{table}
+
+The energy per token falls 11.5$\times$ from single-request to batch-16 serving, with diminishing returns at higher batch sizes. Because APEI's throughput inputs are pulled directly from single-request benchmarks (the batch-1 condition), this result creates a foundation for the direction of the resulting bias; its implications for the per-token carbon estimates are developed in Section 5.7.
+
+%=======================================================================
+%  SECTION V
+%=======================================================================
+\section*{Section V: Findings and Results}
+
+\subsection*{5.1 Compute Efficiency}
+
+The compute pillar exhibits the widest variation of the three and it is the dominant source of cross-model differences in final emissions. Node-level energy per token ranges from 51.58 J/token (Grok 4.3) to 180.65 J/token (Claude Opus 4.8), a 3.5$\times$ spread.
+
+This variation tracks neither the hardware power nor throughput in isolation. Gemini 3.1 Pro and Claude Opus 4.8 consume identical node power (11.2 kW), yet Gemini 3.1 Pro's higher throughput (123 vs. 62 tokens/second) yields roughly half the per-token energy. Conversely, raw speed does not determine efficiency either, Llama 4 Maverick (93 tokens/second on a 7.84 kW node) achieves lower per-token energy than Gemini (123 tokens/second on an 11.2 kW node), because its lower-powered node outweighs its lower speed. Only the ratio of node power to throughput determines per-token energy consumption, which is why it---not power or speed in isolation---is the correct unit of computing efficiency.
+
+Figure~\ref{fig:compute-field} illustrates this pattern, one of the central findings of this analysis. The figure plots energy per token as a function of two variables: Node power (y-axis) and throughput (x axis). Since energy per token is calculated by dividing node power by throughput, efficiency depends on the relationship between these two values rather than either one individually. Diagonal lines represent combinations of power and throughput that produce the same energy per token.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.92\textwidth]{fig3_compute_field.png}
+  \caption{Compute Efficiency as a Field: Energy per Token Across Power and Throughput.}
+  \label{fig:compute-field}
+\end{figure}
+
+The relationship reveals a clear trend. The least efficient region appears in the upper-left portion of the plot, where the models consume high power while generating relatively few tokens per second. In contrast, the most efficient region lies in the lower right field, where power consumption is lower and throughput is higher. As a result, efficiency improves along a diagonal path across the figure, demonstrating that both power demand and generation speed must be considered together when evaluating a model's efficiency.
+
+\subsection*{5.2 Grid Carbon Intensity}
+
+Grid carbon intensity varies far less across the five models than compute efficiency does. Across the five frontier models, carbon intensities range from 92.81 $\mu$g \cotwo e/J (GPT-5.5 on the ERCOT grid) to 132.30 $\mu$g \cotwo e/J (Grok 4.3 on an on-site natural gas blend), a spread of approximately 1.4$\times$.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.92\textwidth]{fig4_grid_pillar_only.png}
+  \caption{Grid Carbon Intensity by Model (Grid Pillar Only).}
+  \label{fig:grid-pillar}
+\end{figure}
+
+These values are based on the EPA eGRID2023 subregion averages (Table~\ref{tab:egrid-ref}), which show a much wider national spread in grid carbon intensity: from about 54.2 $\mu$g \cotwo e/J in cleaner regions like California (CAMX) up to 115.4 $\mu$g \cotwo e/J in more carbon-intensive areas such as the Midwest (RFCW). However, the models for this APEI paper are not distributed evenly across that full range. Instead, they are mostly located in relatively carbon-intense regions (including Texas, the Midwest and the Tennessee Valley) largely because those are common locations for large-scale data centers. As a result, the variation in grid intensity between models is compressed compared to the broader variation that exists across the United States overall.
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{|l|l|c|c|}
+    \hline
+    \textbf{Subregion} & \textbf{Region} & \textbf{lb \cotwo e/MWh} & \textbf{$\mu$g \cotwo e/J} \\
+    \hline
+    RFCW & Midwest (coal-heavy) & 916.1 & 115.4 \\
+    \hline
+    SRTV & Tennessee Valley & 903.3 & 113.8 \\
+    \hline
+    \rowcolor{usavg}
+    \textbf{U.S. average} & \textbf{National mean} & \textbf{770.9} & \textbf{97.1} \\
+    \hline
+    ERCT & Texas (ERCOT) & 736.6 & 92.8 \\
+    \hline
+    NWPP & Pacific Northwest & 635.3 & 80.0 \\
+    \hline
+    SRVC & Carolinas & 596.4 & 75.1 \\
+    \hline
+    CAMX & California & 430.0 & 54.2 \\
+    \hline
+  \end{tabular}
+  \caption{Reference eGRID subregion emission factors used to contextualize model grid-carbon assignments.}
+  \label{tab:grid-reference-vertical}
+\end{table}
+
+The reference table also explains the variations of the per-model range. Claude Opus 4.8 is assigned RFCW's published intensity of 115.4 $\mu$g \cotwo e/J because it is served from a documented facility in that subregion. Grok 4.3 exceeds this value at 132.30 $\mu$g \cotwo e/J due to its reliance on on-site natural gas generation, which is more carbon-intensive than any grid subregion in the dataset. By contrast, Gemini 3.1 Pro and Llama 4 Maverick are both assigned the U.S. average intensity of 97.13 $\mu$g \cotwo e/J because their serving locations are undisclosed, making this a conservative proxy rather than a model-specific finding.
+
+\subsection*{5.3 Cooling Overhead}
+
+Cooling overhead varies the least of the three pillars. Across the five models, PUE spans only 1.09 to 1.18. This range of under 9\% is observed because all frontier inference is assumed to operate within Lawrence Berkeley National Laboratory's tightly clustered AI Specialized facility class (with a median PUE at 1.14); this pillar contributes only a $\sim$1.08$\times$ spread, compared to 1.4$\times$ for grid carbon intensity and 3.5$\times$ for compute demand.
+
+As a result, cooling does not affect relative model rankings. It effectively functions as an almost constant linear adjustment: essential for translating chip-level energy use into true facility-level energy consumption, yet it remains relatively unchanged between different models. Even in the two fallback scenarios (GPT-5.5 and Llama 4 Maverick) where cooling assumptions are uncertain and the category median is applied, the impact on final per-token carbon intensity remains minimal as well. Because the cooling efficiency values are tightly clustered, even a worst case misassignment would only shift total emissions by a few percent. That level of variation is still smaller than the differences between adjacent models in the primary metric, proving that it does not affect model rankings. As a result, the cooling pillar is the most consistent component of the larger APEI framework, since modern AI data centers exhibit relatively little variation in thermal overhead.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{fig5_pue_range.png}
+  \caption{Power usage effectiveness (PUE) across the five models; lower is better. Liquid-cooled Gemini and Claude sit at 1.09, air-cooled Grok at 1.18, and the two unconfirmed facilities (GPT-5.5, Llama) take the LBNL median of 1.14. The spread is under 9\%, and cooling is effectively constant.}
+  \label{fig:pue-range}
+\end{figure}
+
+\subsection*{5.4 Computing APEI: The Full Index}
+
+The three pillars combine through direct multiplication to produce a single measure of per-token carbon emissions
+\[
+\text{APEI} = \prod_{i=1}^{3} p_i
+\]
+Instantiated for the three pillars, this returns the primary metric:
+\[
+\text{gCO}_2\text{e/token} = \left(\frac{P_{\text{node}}}{T}\right) \times \text{PUE} \times I_{\text{grid}}
+\]
+Here, $P_{\text{node}}$ is node power, measured in Watts (W), $T$ is the generation throughput (tokens/second), PUE is the dimensionless cooling ratio, and $I_{\text{grid}}$ is grid carbon intensity, measured in g\cotwo{} equivalent/joule.
+
+The product is implemented here rather than a weighted sum for a few main reasons. The product carries no free weights to defend, and it returns a single quantity in actual units, rather than an abstract score. Because token count enters only through the throughput ($T$) value and cancels out, the metric is independent regardless of query length; it measures the fundamental per-token efficiency. It is convenient to group the facility-level energy per token,
+\[
+E_{\text{tok}} = \frac{P_{\text{node}}\,\text{PUE}}{T}, \qquad
+\text{gCO}_2\text{e/token} = E_{\text{tok}}\, I_{\text{grid}},
+\]
+Where the grid intensity ($I_{\text{grid}}$) is converted from the reported emission rate by
+\[
+I_{\text{grid}} = \frac{(\text{lb CO}_2\text{e/MWh}) \times 453.592}{3.6 \times 10^{9}} \quad [\text{g/J}].
+\]
+Evaluating the product across the five models yields the central result of this APEI paper. xAI's Grok 4.3 produces the least carbon per generated token (0.00805 g\cotwo e/token) and Anthropic's Claude Opus 4.8 is the most at (0.02273 g\cotwo e/token). The spread across the five models is 2.82$\times$, the ratio of the `dirtiest' to the cleanest.
+
+Figure~\ref{fig:apei-index} reports the full rankings:
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{fig6_apei_index.png}
+  \caption{APEI: g\cotwo e per generated token across the five models (2.82$\times$ spread).}
+  \label{fig:apei-index}
+\end{figure}
+
+The ordering is not the one grid carbon intensity would predict. Grok draws on the highest carbon supply in the set, at 1,050 lb \cotwo e/MWh (documented on an on-site gas blend), yet it yields the cleanest tokens, while Claude, on a cleaner grid, yields the dirtiest. The explanation is already identifiable in the pillars without any extra transformation. Comparing each pillar's range across the five models shows that compute rises about 3.5$\times$ (from 51.6 to 180.7 J/token), grid intensities vary about 1.4$\times$, and cooling efficiency varies just 1.08$\times$. In other words, compute has a far larger spread than carbon intensity or cooling (by roughly an order of magnitude compared to cooling) and is still substantially larger than grid variation as well.
+
+This means hardware efficiency is doing most of the work in separating clean from dirty tokens, not the electricity mix. Grok's compute pillar sits at roughly half the typical node cost in this dataset, a 3.5$\times$ advantage that comfortably outweighs its 1.4$\times$ grid penalty and 1.08$\times$ cooling penalty, leaving it the cleanest overall model. By contrast, Claude's compute pillar is about 1.8$\times$ the typical cost and that inefficiency is only partially offset by its (relatively) efficient cooling system.
+
+The three remaining models-- Llama 4 Maverick (0.00933), Gemini 3.1 Pro (0.00964) and GPT-5.5 (0.01481)-- are separated by very small margins that are largely dependent on US average grid proxies (Section 4.2). Because these values are tightly clustered and sensitive to assumptions in the grid estimates, their ordering is not significant. Instead, no ranking is assigned among them. The relative positions are not stable under the uncertainty introduced by the proxy data. Any fine-grained ordering would overstate the precision of the estimates. Only the two endpoints of the distribution (Grok as the cleanest and Claude as the dirtiest) are treated as stable and interpretable conclusions of the analysis.
+
+\subsubsection*{5.4.1: Robustness of the Ranking: Monte Carlo Simulation}
+
+The ranking in Figure~\ref{fig:apei-index} is built from single estimates for each input (these can be factors such as how carbon-intensive the grid is, or how much energy a data center's cooling system adds on top of raw computing power). These values are not exact: grid intensities are often regional averages rather than actual meter readings, and computing overhead figures come from published ranges rather than live measurements. Before drawing conclusions from a ranking like this, it is important to consider if these conclusions remain constant when inputs shift.
+
+To test this, a Monte Carlo simulation was used: essentially, the ranking calculation was repeated 10,000 times, each time randomly varying input within a reasonable range, and then checked if the model ended on top or on the bottom each time. A fixed random seed (42) was used so the results are fully replicable. Each draw samples a grid intensity and a PUE value for every model, then it recalculates the full per-token carbon figure for all five models and records their resulting rank order. One important design choice that is worth noting is that not all of these inputs were treated as equally uncertain. Where a data center has publicly disclosed its own figures (as in the case with Grok and Claude), those inputs varied within a narrow band. In other cases (Llama, Gemini, GPT), the regional fallback proxy values were used, and those values varied across their full documented range. Specifically, the least-reliable estimates of the findings of this paper were stress-tested the hardest in order to ensure that this paper's conclusions are driven by the authentic evidence rather than unverified assumptions.
+
+The simulation reveals an observable asymmetry between the two ends of the ranking. Claude Opus 4.8 is the highest-emissions model in all the 10,000 draws (100\% of the time, without exceptions). In Figure~\ref{fig:montecarlo}, it sits in an isolated band above 0.0215 g\cotwo e/token, with a clear gap separating it from every other model in this analysis. This reason is more straightforward than it may seem: Claude's node energy per token (180.7 J) is much higher than any other model, and no realistic shift in grid carbon intensity or cooling overhead can substantially compensate for it. Compute efficiency, regardless of location, is what determines Claude's position at the dirty end of the distribution.
+
+The clean end of the ranking tells a different story. Grok 4.3 is the single cleanest model in 68.3\% of draws, and falls within the two cleanest in 96.5\% of draws. Llama and Gemini are close enough to Grok when their proxy-derived grid intensities shift toward their lower bounds. Importantly, this uncertainty of the clean end actually reinforces APEI's whole argument, instead of undermining it. The central claim is that per-token carbon is driven primarily by compute efficiency, not by where a model's underlying infrastructure or data center is located on the grid. That claim reoccurs in all 10,000 draws. The compute pillar varies by a factor of 3.5$\times$ across the five models, compared to only 1.4$\times$ for grid intensity. The model drawing from the highest-carbon grid in the study still ranks among the two cleanest systems in 96.5\% of simulated scenarios. That inversion (a high-carbon grid paired with clean overall emissions) is a stable structural feature of the results, and is not a coincidence of any single input value.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{fig7_montecarlo.png}
+  \caption{Monte Carlo simulation results: carbon emitted per token generated (grams \cotwo e / token).}
+  \label{fig:montecarlo}
+\end{figure}
+
+\subsection*{5.5 The Secondary Metric: Thinking-Inclusive Per-Query Carbon Emissions.}
+
+The primary metric intentionally isolates generation efficiency by measuring the carbon emissions associated with producing a single output token.  Because this is normalized by output, the metric is independent of the amount of time a model spends reasoning before generation begins. For reasoning-oriented models, however, this omission is significant, because the excluded reasoning energy is a substantial fraction of total consumption during the ``Time-To-First-Answer-Token (TTFAT) phase.'' To account for this additional computational cost, a second query-level metric (g\cotwo e/query) estimates the total emissions associated with producing an entire response, including reasoning.
+
+For any model, the query-level carbon intensity can be defined as:
+\[
+\text{gCO}_2\text{e/query} = P_{\text{node}} \times \text{PUE} \times I_{\text{grid}} \left( \text{TTFAT} + \frac{N_{\text{out}}}{T} \right)
+\]
+where TTFAT is the time to first answer token (reasoning latency), $N_{\text{out}}$ is the number of output tokens and $T$ is the generation throughput (tokens/second). Node power is assumed to remain constant at its rated value throughout the inference process (including the reasoning phase) because the accelerators remain fully active during this phase. These results, unless otherwise stated, are reported for a representative query producing 500 output tokens.
+
+Unlike the primary (APEI) index, which evaluates generation efficiency alone, the query-level metric measures the total environmental cost of serving a complete response, including the reasoning phase. Consequently, when this is applied, the relative ordering of the models shifts. Figure~\ref{fig:query-level} summarizes these results. Llama 4 Maverick records the lowest emissions at 5.535 g\cotwo e/query, while Claude Opus 4.8 produces the highest at 46.587 g\cotwo e/query, yielding an 8.42$\times$ difference between the cleanest and most carbon-intensive models. This spread is nearly three times greater than the 2.82$\times$ range derived from the per-token (APEI) metric. In summary, the query-level carbon from reasoning is substantial in addition to overall carbon emissions.
+
+This reordering is a key secondary result: it shows that reasoning latency is large enough to rearrange models with otherwise similar per-token costs, yet not large enough to displace the endpoints the primary metric identifies. Llama 4 Maverick and Grok exchange the top two positions, with Llama moving from second to first and Grok from first to second, while GPT-5.5 and Gemini 3.1 Pro similarly swap third and fourth. However, Claude Opus 4.8 remains the most carbon-intensive model under both metrics, and the gap separating it from the other models widens considerably. Its combination of relatively inefficient token generation and prolonged reasoning results in substantially higher emissions per completed query.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{fig8_query_level.png}
+  \caption{g\cotwo e per query (thinking-inclusive, 500 output tokens); ordering differs from per-token: reasoning latency dominates (8.42$\times$ spread).}
+  \label{fig:query-level}
+\end{figure}
+
+\subsection*{5.6 Validation of Specification-Based Power Estimates}
+
+The Zeus validation experiment provides empirical support for using specification-based estimates when direct measurements are unavailable. Because proprietary frontier systems do not expose live hardware telemetry, APEI estimates node-level energy from published or inferred power specifications. The comparison below tests that approach on an accessible GPU workload by comparing the specification-derived estimate against a direct Zeus measurement for the same model, hardware, and single-stream setting.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.62\textwidth]{fig9_zeus_validation.png}
+  \caption{Specification-based estimate vs. direct measurement. Qwen2.5-3B-Instruct on Tesla T4, single stream.}
+  \label{fig:zeus}
+\end{figure}
+
+The specification-based estimate is 4.785 J/token versus a direct Zeus measurement of 3.998 J/token---an overestimate of 19.7\% relative to the measured value.
+
+The conservative direction is expected because the specification-based approach uses Thermal Design Power (TDP) rather than measured runtime power. Since TDP represents a rated upper operating envelope, it tends to overstate actual sustained power draw. The relatively small gap between the estimate and the Zeus measurement suggests that APEI captures real-world inference energy with reasonable accuracy, increasing confidence in the inferred hardware power estimates used throughout the analysis.
+
+\subsection*{5.7 Batch-Size Sensitivity Sweep}
+
+The primary analysis of APEI assumes a single-stream inference, in which one request occupies the hardware accelerator at a time. Production and frontier deployments instead batch multiple concurrent requests, allowing the hardware to process several sequences simultaneously and therefore allocate a fixed computational cost across a larger number of output tokens. To assess whether batching changes the conclusions of this study, a sensitivity sweep analysis was conducted to vary the effective batch size while keeping other parameters constant.
+
+Because every frontier system batches, the effect shifts all models' figures downward together without reordering them. The single-stream values reported in Section 5.4 are therefore conservative upper bounds on the deployed per-token carbon. The ranking, which depends on relative compute efficiency rather than absolute energy, is preserved under batching. This claim is isolated from the secondary per-query metric (Section 5.5): the batching experiment measures decode-phase throughput only, and whether the reasoning component TTFAT allocates similarly under concurrent deployment is not tested here.
+
+The stability of the primary ranking under batching follows directly from the structure of the metric. As batch size increases, throughput is expected to improve proportionally across models, reducing per-token energy consumption fairly uniformly and rescaling absolute emissions without meaningfully changing their relative order. As a result, differences between the models continue to reflect their computational efficiency rather than differences in hardware configuration.
+
+These findings indicate that the conclusions of the primary benchmark are not driven by the single-stream assumption. Real-world deployments that use batching will generally exhibit lower absolute carbon intensity than reported in the single-stream setting.
+
+However, this robustness result applies only to the primary per-token metric; it does not extend to the query-level metric, since the experiment isolates decode-phase throughput only and does not evaluate whether reasoning latency scales similarly under batching. Understanding whether reasoning latency is similarly allocated under simultaneous inference continues to remain an open question and is left for future research, particularly as reasoning heavy models become more prevalent in these frontier systems.
+
+%=======================================================================
+%  SECTION VI
+%=======================================================================
+\section*{Section VI: Limitations and Scope}
+
+\subsection*{6.1 Scope}
+
+The AI power efficiency index measures the operational, generation-phase carbon emissions of frontier LLMs, captured by g\cotwo e/token and in the secondary form: accounting for per-query emissions including latency from reasoning. This study compares five of the most capable frontier systems available at the time of this study (mid-2026 -- GPT-5.5, Llama 4 Maverick, Gemini 3.1 Pro, Claude Opus 4.8, Grok 4.3). APEI is designed as a comparative framework for evaluating the operational carbon efficiency of these models using three quantifiable metrics: compute power, grid carbon intensity, and cooling efficiency. This framework is intentionally limited to inference-time emissions and grid carbon intensity, and does not account for training emissions, embodied carbon from semiconductor or data center manufacturing, water consumption, electronic waste, and network transmission losses beyond the supporting infrastructure. Consequently, APEI should be interpreted as a measure of operational carbon efficiency rather than the total environmental impact of an AI model.
+
+Within these boundaries, APEI should be interpreted as a specification-based estimate rather than a direct measurement of operational carbon emissions. Several inputs rely on publicly available specifications and engineered proxies because much of the information is undisclosed by AI companies. Specifically, grid carbon emissions for three of the five models are estimated using regional and U.S. average electricity rather than facility-specific values, cooling efficiency is represented by median Power Usage Effectiveness (PUE) values for each data center category, and power consumption for two accelerator types is inferred from independent technical analysis due to the absence of vendor-reported metrics. As a result, the primary contribution of APEI is its transparent and reproducible framework for comparing operational carbon efficiency rather than the exact precision of any individual emissions estimate. As demonstrated in the sensitivity analysis, the relative rankings between models remain stable despite reasonable uncertainty in these estimated input values.
+
+While this study applies APEI to five frontier models, the framework is designed to be broadly applicable. Estimating APEI for a model requires only three inputs: generation throughput, node-level power, and the carbon intensity of the electricity supplying the data center. Although the confidence in these inputs varies depending on the model, they can be obtained for most deployed LLMs. With thousands of models now available through both open-weight releases and commercial APIs, applying APEI more broadly could create a standardized carbon leaderboard across the LLM ecosystem. Such a benchmark would make it possible to compare environmental performance between models in a way that existing AI evaluation frameworks do not currently support.
+
+\subsection*{6.2 Limitations}
+
+\subsubsection*{6.2.1 Compute Efficiency Estimates}
+
+Per-chip power specifications are publicly available for only one of three accelerator architectures evaluated in this study. NVIDIA publishes a Thermal Design Power (TDP) of 700 W for the H100 GPU, which is used by GPT-5.5, Grok 4.3, and Llama 4 Maverick. In contrast, Google and Amazon (AWS) do not disclose per-chip power consumption for TPU v7 (Ironwood) and Trainium2 accelerators used by Gemini 3.1 Pro and Claude Opus 4.8, respectively. Consequently, power consumption for the two accelerators is estimated using the best publicly available information. TPU v7 power is inferred from published pod-level specifications, yielding an estimated 1,000 W per chip. An earlier estimate of 600 W was determined to be incorrect during analysis and would have underestimated Gemini's accelerator power by approximately 40\%. Trainium2 power is estimated at 500 W per chip based on an independent technical analysis by Patel et al. (2024). Although these estimates are supported by publicly available evidence, they are less certain than the confirmed manufacturer's specifications.
+
+Additional modeling assumptions are required at the node level. TPU nodes are normalized to eight accelerators to provide a consistent basis for comparisons across other hardware platforms (although Google's native deployment unit consists of a four-chip virtual server). Similarly, a uniform overhead multiplier of 1.4 is applied to all systems to account for CPU power, memory (SRAM, DRAM, RAM, HBM), networking, and storage, and power-supply variations. Applying a common multiplier across these systems minimizes additional systematic biases in the comparative ranking, although it remains an approximation rather than a direct measurement.
+
+Finally, the throughput and time-to-first-answer-token measurements are obtained from Artificial Analysis and represent point-in-time benchmark results that may vary with provider load and other deployment conditions. In particular, Llama 4 Maverick's throughput is reported as a median across multiple providers rather than a single first-party deployment, resulting in a less consistent measurement standing than that of the other models evaluated.
+
+\subsubsection*{6.2.2 Grid Carbon Proxies}
+
+Grid carbon intensity is the largest source of uncertainty in the APEI framework because three of the five evaluated models rely on regional or U.S. average grid data rather than facility-specific information. Google and Meta do not disclose the locations at which Gemini and Llama are served and OpenAI's disclosure for GPT is partial and only spans multiple sites. For these models, grid intensity cannot be tied to a known facility and must be approximated.
+
+To compensate for the absence of facility data, Gemini and Llama are assigned the U.S. average grid intensity of 770.9 lb \cotwo e/MWh, a value derived from the eGRID2023 national figure of 349.67 kg \cotwo e/MWh. Because APEI is computed as a product, this uncertainty is directly reflected into the final per-token value. As a result, the carbon ranges for the three proxy-based models overlap, and grid intensity alone does not provide sufficient resolution to establish a reliable ranking among them. For this reason, the most accurate comparative conclusions are drawn from Claude Opus 4.8 and Grok 4.3, which are supported by more complete facility-level disclosure, while the proxy-based models are not assigned an internal ranking.
+
+A further limitation of this approach is that the proxies induce a slight systematic bias. Because Google and Meta maintain 24/7 carbon-free-energy commitments, the U.S.-average grid intensity likely overstates the true operational emissions of both Gemini and Llama; their actual intensity is therefore expected to be lower than reported here.
+
+Finally, there is another uncertainty within the grid data: the analysis relies on eGRID2023, which reflects 2023 generation conditions. However, grid carbon intensity declines over time as electricity systems decarbonize. A community estimate for eGRID2024 reports an average reduction of approximately 3\% relative to that reported in eGRID2023. As a result, the reports are slightly behind current operational conditions, but remain consistent with the conservative bias of the proxy. In summary, these figures are more likely to overestimate than underestimate present-day carbon emissions.
+
+\subsubsection*{6.2.3 Cooling Efficiency Estimates}
+
+No Power Usage Effectiveness (PUE) value in this analysis is a metered, facility-specific measurement. Instead, all five PUE scores are derived from the AI Specialized data-center category reported by the University of California and United States Department of Energy's Lawrence Berkeley National Laboratory (LBNL 2024), which reports a median PUE of 1.14, from a range of 1.08--1.19. Facilities with confirmed liquid cooling are assigned values near the lower end of this range (at 1.09), while facilities with confirmed air cooling are assigned values near the higher end (at 1.18).
+
+For models whose cooling architecture could not be verified, the category median of 1.14 is used as the most conservative fallback estimate. GPT and Llama are assigned this value because publicly available information does not fully confirm their cooling systems. LBNL also notes that its modeled PUE estimates may themselves be conservative, adding another source of uncertainty.
+
+Despite these limitations, the cooling pillar has the smallest degree of influence on the final APEI rankings. Across the five evaluated models, PUE values vary by a factor of only 1.08--1.19, compared with an approximately 3.5$\times$ for compute power and 1.4$\times$ for grid carbon intensity. Consequently, uncertainty in cooling efficiency contributes substantially less to the overall uncertainty of the framework than the other pillars.
+
+\subsubsection*{6.2.4 Node power and Throughput Assumptions}
+
+Node power is estimated from the assumption that each accelerator operates at its full Thermal Design Power (TDP), which is a conservative proxy rather than a direct runtime measurement. The validation in Section 5.6 supports this approach, but it was collected using a three billion parameter model on a single general-use GPU. As a result, it should not be interpreted as a direct measurement of utilization ratios for large-scale data center hardware operating frontier workloads.
+
+A second limitation concerns the throughput measurements. All throughput values used in this study represent low-concurrency, single request API performance, whereas production inference typically batches multiple requests to optimize hardware utilization. Hardware validation demonstrated that per-token energy decreased by a factor of 11.5 as batch size increased from one to sixteen requests. As a result, the reported per-token emissions are likely to exceed those observed under production serving, where batching improves hardware utilization.
+
+\subsubsection*{6.2.5 The Secondary (per-query) Metric Estimates}
+
+The secondary, per-query metric of APEI introduces additional assumptions beyond the primary metric. It assumes that the accelerator hardware draws full node power throughout the reasoning phase. This is the conservative choice because accelerators remain active during the reasoning phase of a query; however, this has not been tested against a lower-utilization variant. For example, a 50\% draw during reasoning is the natural sensitivity case, and was not evaluated.
+
+The secondary per-query metric is evaluated using a single representative query length of 500 output tokens, matching the methodology used by the throughput benchmark. Because per-query carbon emissions increase alongside output length, the observed per-query range of 8.42 is specific to this function. Different query lengths would change the absolute emissions values, although they would not necessarily change the overall ordering of the models. The secondary per-query metric also evaluates each model using the highest reasoning setting. GPT-5.5 and Grok 4.3 are evaluated using their `high' reasoning tiers, while the remaining models are evaluated using their only available tier or highest reasoning tier. For example, Anthropic gave Claude Opus 4.8 five different reasoning tiers (low, medium, high, extra, max), for this study Opus' ``Max'' tier was used because the other tiers were not available. As a result, the reported per-query values represent carbon emissions for complex reasoning tasks rather than the average emissions of typical daily use.
+
+Finally, the batching analysis only applies to the token generation phase. Whether reasoning latency is reduced by batching in the same way as token generation was not evaluated, since the reasoning process may respond differently to parallel requests. In this case, the conservative upper-bound standard developed for the primary per-token metric is not applied to the secondary per-query metric.
+
+\subsubsection*{6.2.6 Hardware-Estimate Sensitivity}
+
+The Monte Carlo analysis in Section 5.4.1 varies grid intensity and PUE, but holds the two inferred hardware figures (Trainium2 at 500 W and TPU v7 at 1{,}000 W per chip) at their point estimates across all draws. Because these two values are the least-certain inputs in the study, and because the compute pillar is the dominant source of variance in the primary metric, this section stress-tests them directly through a break-even analysis rather than a distributional sweep. A break-even is the appropriate tool here: each figure derives from a single technical source rather than a characterized distribution, so the more defensible question is not how the ranking behaves under an assumed spread, but how far the point estimate would have to move to change the result.
+
+Claude Opus 4.8's final per-token carbon scales linearly with Trainium2 per-chip power, since node power, energy per token, and per-token carbon are all direct multiplications of that figure. Claude falls below the next-highest model, GPT-5.5, only if the true Trainium2 figure is below approximately 326 W, a 35\% reduction from the Patel et al. (2024) estimate of 500 W. GPT-5.5 runs on confirmed H100 hardware, so its value does not move under this perturbation. Above the 326 W threshold, Claude remains the highest-emitting model regardless of any grid or cooling assumption.
+
+The cleanest endpoint of the ranking is not exposed to this uncertainty at all. Grok 4.3 and Llama 4 Maverick are both served on confirmed H100 hardware, so the comparison that places Grok as the single cleanest model depends on no inferred power figure; it is a function of measured throughput alone. Both endpoints of the ranking are therefore robust to hardware-estimate uncertainty within any plausible range of the inferred inputs, and the primary finding, that compute efficiency rather than grid location determines the extremes of the distribution, does not rest on the specific value of either inferred figure.
+
+\subsection*{6.3 The Bigger Picture: A more accurate APEI}
+
+Further improvements to APEI will depend on greater transparency from AI providers. More accurate estimates would require disclosure of facility locations, timely grid-emissions data, and clean-energy practices. Cooling estimates could be refined using metered, facility-specific PUE values rather than categorical averages. Compute estimates would benefit from manufacturer-published hardware power measurements and direct on-hardware energy measurements of current deployed frontier models. Future versions of this framework could also include measured power consumption during reasoning, representative production workloads, and broader validation across multiple hardware platforms and large frontier models. These limitations do not invalidate the findings presented in this study; rather, they reflect a broader issue: the lack of publicly available operational data needed to produce an accurate quantifiable benchmark.
+
+%=======================================================================
+%  SECTION VII
+%=======================================================================
+\section*{Section VII: Conclusion}
+
+The AI Power Efficiency Index reframes how the environmental cost of frontier large language models is quantified. Rather than reporting environmental cost as a single aggregate figure, APEI estimates the carbon emitted per token of generated output at inference time---the quantity that accumulates as a model is queried billions of times in deployment---by treating emissions as the physical product of three measurable pillars: compute efficiency, cooling overhead, and grid carbon intensity. Because the units cancel, the result reduces to a single metric: g\cotwo e per token.
+
+When applied to five of the most capable frontier models at the time of this study (GPT-5.5, Claude Opus 4.8, Gemini 3.1 Pro, Llama 4 Maverick, Grok 4.3 -- July 2026), APEI introduces one central finding: compute efficiency rather than grid location or cooling methods is the largest contributor to per-token carbon emissions. Across the five models, the compute pillar varies 3.5$\times$, grid carbon intensity varies 1.4$\times$, and cooling varies only 1.08$\times$. That imbalance is what drives the most paradoxical finding: Grok 4.3 draws from the dirtiest power source among the models in this study, yet it emits the fewest grams per token (0.00805 g\cotwo e/token). By contrast, Claude Opus 4.8 runs on a cleaner grid and emits the most (0.02273 g\cotwo e/token), yielding a 2.82$\times$ spread across the full spectrum. This supports the conclusion that hardware efficiency plays the biggest role separating clean tokens from dirty ones; where a model or data center is geographically located matters far less than how efficiently it turns power into output.
+
+The secondary metric accounts for thinking-inclusive emissions, adding to the broader picture of operational impact. Once reasoning latency is applied, the per-query spread increases to 8.42$\times$ and the middle of the ranking shifts; however, Claude Opus 4.8 remains the highest emitter and pulls further from the rest because inefficient token generation and extended reasoning compound its per-query emissions. These rankings were stress-tested in a 10,000-iteration Monte Carlo simulation, placing Claude highest in 100\% of draws and Grok among the two cleanest in 96.5\%, confirming that the endpoints are structural rather than artifacts of any single input. A dedicated break-even analysis (Section 6.2.6) extends this robustness to the inferred hardware figures: Claude remains the highest emitter unless the Trainium2 power estimate is overstated by more than 35\%, and the cleanest endpoint depends on no inferred value at all. Direct measurement with Zeus shows the full-TDP assumption overestimates real power by 19.7\% and batching cuts per-token energy by up to 11.5$\times$, so every figure represents a conservative upper bound on deployed emissions.
+
+When combined, these results point to a notable gap; no model in the sample wins across all three pillars, which suggests that compute architecture, energy sourcing, and cooling are not yet optimized in frontier systems. The greatest limitation of this study is not the methodology, but the availability of data; APEI is only as precise as the disclosures that labs and providers are willing to release. Facility locations, live grid data, per-chip power, and metered PUE (and eventually WUE, Water Usage) would each contribute to a more accurate picture. Until that transparency exists, a specification-based framework like APEI offers the most complete comparison available, and it underscores that as inference becomes the dominant cost of AI, per-token efficiency is the number that should be tracked---yet the one most benchmarking leaderboards disregard.
+
+%=======================================================================
+%  CITATIONS AND BIBLIOGRAPHY  (APA 7, hanging indent)
+%=======================================================================
+\section*{Citations and Bibliography}
+
+\newcommand{\bibentry}[1]{\noindent\hangindent=0.4in\hangafter=1 #1\par\medskip}
+
+\bibentry{Artificial Analysis. (2026). \emph{LLM leaderboard: Comparison of over 100 AI models} [Data set]. Retrieved June 18, 2026, from \url{https://artificialanalysis.ai/leaderboards/models}}
+
+\bibentry{Harris, C. R., Millman, K. J., van der Walt, S. J., Gommers, R., Virtanen, P., Cournapeau, D., Wieser, E., Taylor, J., Berg, S., Smith, N. J., Kern, R., Picus, M., Hoyer, S., van Kerkwijk, M. H., Brett, M., Haldane, A., del R\'{i}o, J. F., Wiebe, M., Peterson, P., \ldots{} Oliphant, T. E. (2020). Array programming with NumPy. \emph{Nature, 585}(7825), 357--362. \url{https://doi.org/10.1038/s41586-020-2649-2}}
+
+\bibentry{Henderson, P., Hu, J., Romoff, J., Brunskill, E., Jurafsky, D., \& Pineau, J. (2020). Towards the systematic reporting of the energy and carbon footprints of machine learning. \emph{Journal of Machine Learning Research, 21}(248), 1--43. \url{http://jmlr.org/papers/v21/20-312.html}}
+
+\bibentry{Hunter, J. D. (2007). Matplotlib: A 2D graphics environment. \emph{Computing in Science \& Engineering, 9}(3), 90--95. \url{https://doi.org/10.1109/MCSE.2007.55}}
+
+\bibentry{Intergovernmental Panel on Climate Change. (2021). \emph{Climate change 2021: The physical science basis. Contribution of Working Group I to the Sixth Assessment Report of the Intergovernmental Panel on Climate Change} (V. Masson-Delmotte, P. Zhai, A. Pirani, S. L. Connors, C. P\'{e}an, S. Berger, N. Caud, Y. Chen, L. Goldfarb, M. I. Gomis, M. Huang, K. Leitzell, E. Lonnoy, J. B. R. Matthews, T. K. Maycock, T. Waterfield, O. Yelek\c{c}i, R. Yu, \& B. Zhou, Eds.). Cambridge University Press. \url{https://doi.org/10.1017/9781009157896}}
+
+\bibentry{Jegham, N., Abdelatti, M., Koh, C. Y., Elmoubarki, L., \& Hendawi, A. (2025). \emph{How hungry is AI? Benchmarking energy, water, and carbon footprint of LLM inference} [Preprint]. arXiv. \url{https://doi.org/10.48550/arXiv.2505.09598}}
+
+\bibentry{Luccioni, A. S., Jernite, Y., \& Strubell, E. (2024). Power hungry processing: Watts driving the cost of AI deployment? In \emph{Proceedings of the 2024 ACM Conference on Fairness, Accountability, and Transparency} (pp. 85--99). Association for Computing Machinery. \url{https://doi.org/10.1145/3630106.3658542}}
+
+\bibentry{Luccioni, A. S., Viguier, S., \& Ligozat, A.-L. (2023). Estimating the carbon footprint of BLOOM, a 176B parameter language model. \emph{Journal of Machine Learning Research, 24}(253), 1--15. \url{http://jmlr.org/papers/v24/23-0069.html}}
+
+\bibentry{Masanet, E., Shehabi, A., Lei, N., Smith, S., \& Koomey, J. (2020). Recalibrating global data center energy-use estimates. \emph{Science, 367}(6481), 984--986. \url{https://doi.org/10.1126/science.aba3758}}
+
+\bibentry{NVIDIA Corporation. (2023). \emph{NVIDIA H100 Tensor Core GPU datasheet.} \url{https://resources.nvidia.com/en-us-tensor-core/nvidia-tensor-core-gpu-datasheet}}
+
+\bibentry{Patel, D., Nishball, D., \& Knuhtsen, R. (2024, December 3). \emph{Amazon's AI self sufficiency: Trainium2 architecture \& networking.} SemiAnalysis. \url{https://semianalysis.com/2024/12/03/amazons-ai-self-sufficiency-trainium2-architecture-networking}}
+
+\bibentry{Patterson, D., Gonzalez, J., Le, Q., Liang, C., Munguia, L.-M., Rothchild, D., So, D., Texier, M., \& Dean, J. (2021). \emph{Carbon emissions and large neural network training} [Preprint]. arXiv. \url{https://doi.org/10.48550/arXiv.2104.10350}}
+
+\bibentry{Samsi, S., Zhao, D., McDonald, J., Li, B., Michaleas, A., Jones, M., Bergeron, W., Kepner, J., Tiwari, D., \& Gadepally, V. (2023). From words to watts: Benchmarking the energy costs of large language model inference. In \emph{2023 IEEE High Performance Extreme Computing Conference (HPEC)} (pp. 1--9). IEEE. \url{https://doi.org/10.1109/HPEC58863.2023.10363447}}
+
+\bibentry{Shehabi, A., Smith, S. J., Hubbard, A., Newkirk, A., Lei, N., Siddik, M. A. B., Holecek, B., Koomey, J., Masanet, E., \& Sartor, D. (2024). \emph{2024 United States data center energy usage report} (LBNL-2001637). Lawrence Berkeley National Laboratory. \url{https://doi.org/10.71468/P1WC7Q}}
+
+\bibentry{Southern Environmental Law Center. (2025, April 9). \emph{New images reveal Elon Musk's xAI datacenter has nearly doubled its number of polluting, unpermitted gas turbines.} \url{https://www.selc.org/press-release/new-images-reveal-elon-musks-xai-datacenter-has-nearly-doubled-its-number-of-polluting-unpermitted-gas-turbines/}}
+
+\bibentry{Strubell, E., Ganesh, A., \& McCallum, A. (2019). Energy and policy considerations for deep learning in NLP. In \emph{Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics} (pp. 3645--3650). Association for Computational Linguistics. \url{https://doi.org/10.18653/v1/P19-1355}}
+
+\bibentry{U.S. Environmental Protection Agency. (2025). \emph{Emissions \& Generation Resource Integrated Database} (eGRID2023, Revision 2) [Data set]. \url{https://www.epa.gov/egrid}}
+
+\bibentry{You, J., Chung, J.-W., \& Chowdhury, M. (2023). Zeus: Understanding and optimizing GPU energy consumption of DNN training. In \emph{20th USENIX Symposium on Networked Systems Design and Implementation (NSDI '23)} (pp. 119--139). USENIX Association. \url{https://www.usenix.org/conference/nsdi23/presentation/you}}
+
+%=======================================================================
+%  ACKNOWLEDGMENTS
+%=======================================================================
+
+\section*{Acknowledgments}
+
+Peer review: Clare E. Voss, Bishop Shanahan High School, and Osinachi E. Okafor, Brown University.
+%Arnav Chavan, Downingtown STEM Academy
+
+Code generation, testing, and LaTeX editing were assisted by Claude, Claude Science (Anthropic), Kimi (Moonshot AI), Gemini, Google Colab, NotebookLM (Google DeepMind), ChatGPT, aMnd Prism (OpenAI).
+
+
+%=======================================================================
+%  APPENDIX
+%=======================================================================
+\newpage
+\section*{Appendix}
+
+\begin{itemize}
+  \item All python scripts used in this analysis can be found at: \\ \url{https://github.com/sanvan1211/apei-ai-power-efficiency-index}
+\end{itemize}
+
+\vspace{1em}
+\listoffigures
+\vspace{1em}
+\listoftables
+
+\end{document}
